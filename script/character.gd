@@ -2,13 +2,28 @@ extends CharacterBody2D
 @export var health : int
 @export var damage : int
 @export var speed : float
+@export var jump_intensity : float
 
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 @onready var character_sprite: Sprite2D = $CharacterSprite
 @onready var damage_emitter: Area2D = $DamageEmitter
 
-enum State {IDLE, WALK, ATTACK}
+const GRAVITY := 600.0
 
+enum State {IDLE, WALK, ATTACK, TAKEOFF, JUMP, LAND, JUMPKICK}
+
+var animation_map := {
+	State.IDLE: "idle",
+	State.WALK: "walk",
+	State.ATTACK: "punch",
+	State.TAKEOFF: "takeoff",
+	State.JUMP: "jump",
+	State.LAND: "land",
+	State.JUMPKICK: "jumpkick"
+}
+
+var height := 0.0
+var height_speed := 0.0
 var state = State.IDLE
 
 func _ready() -> void:
@@ -30,16 +45,19 @@ func handle_movement():
 			state = State.IDLE
 		else:
 			state = State.WALK
-	else:
-		velocity = Vector2.ZERO
 
 func handle_animation():
-	if state == State.IDLE:
-		animation_player.play("idle")
-	elif state == State.WALK:
-		animation_player.play("walk")
-	elif state == State.ATTACK:
-		animation_player.play("punch")
+	if animation_player.has_animation(animation_map[state]):
+		animation_player.play(animation_map[state])
+
+func handle_air_time(delta: float) -> void:
+	if state == State.JUMP or state == State.JUMPKICK:
+		height += height_speed * delta
+		if height < 0:
+			height = 0
+			state = State.LAND
+		else:
+			height_speed -= GRAVITY * delta
 
 func handle_input():
 	#if Input.is_action_pressed("move_right"):
@@ -63,18 +81,30 @@ func handle_input():
 	velocity = direction * speed
 	if can_attack() and Input.is_action_just_pressed("attack"):
 		state = State.ATTACK
+	if can_jump() and Input.is_action_just_pressed("jump"):
+		state = State.TAKEOFF
+	if can_jumpkick() and Input.is_action_just_pressed("attack"):
+		state = State.JUMPKICK
 
 func can_move() -> bool:
 	return state == State.IDLE or state == State.WALK
 
 func can_attack() -> bool:
 	return state == State.IDLE or state == State.WALK
+	
+func can_jump() -> bool:
+	return state == State.IDLE or state == State.WALK
+	
+func can_jumpkick() -> bool:
+	return state == State.JUMP
 
 func _process(delta: float) -> void:
 	handle_input()
 	handle_movement()
 	handle_animation()
+	handle_air_time(delta)
 	flip_sprites()
+	character_sprite.position = Vector2.UP * height
 	move_and_slide()
 	
 # 这里提供一个方法来把状态恢复到空闲，然后任何需要在执行后就结束返回空闲的动画，都可以关键帧关联这个方法
@@ -86,4 +116,10 @@ func on_emit_damage(damage_receiver: DamageReceiver) -> void:
 	var direction := Vector2.LEFT if damage_receiver.global_position.x < global_position.x else Vector2.RIGHT
 	damage_receiver.damage_received.emit(damage, direction)
 	print(damage_emitter)
-	
+
+func on_takeoff_complete() -> void:
+	state = State.JUMP
+	height_speed = jump_intensity
+
+func on_land_complete() -> void:
+	state = State.IDLE
