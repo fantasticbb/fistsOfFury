@@ -1,6 +1,6 @@
 extends Node2D
 @onready var camera: Camera2D = $Camera
-@onready var player: CharacterBody2D = $Player
+@onready var player: CharacterBody2D = $ActorsContainer/Player
 
 func _process(delta: float) -> void:
 	# 相机和player都是world下的子节点，所以相机的移动逻辑写在world里面，而不要写player或相机里面
